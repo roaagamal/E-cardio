@@ -1,0 +1,249 @@
+---
+title: "Practical Machine Learning"
+author: "Roaa Gamal"
+output:
+  html_document:
+   keep_md: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+
+## Introduction
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+The goal of our project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We may use any of the other variables to predict with. We should descibe how to build our model, how we used cross validation, what we think the expected out of sample error is, and why we made the choices to select the parcticular prediction models over the others. We will also use your prediction model to predict 20 different test cases.
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <a href = "http://groupware.les.inf.puc-rio.br/har"> http://groupware.les.inf.puc-rio.br/har </a> (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The training data for this project are available here:
+
+<a href = https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv> https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv </a>
+
+The test data are available here:
+
+<a href = https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv> https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv </a>
+
+**The data for this project come from this source: <a href = http://groupware.les.inf.puc-rio.br/har>http://groupware.les.inf.puc-rio.br/har</a>.**
+
+### Loading the Dataset
+
+After loading the data we change the name of variable `problem_id` of test data to `classe` as well as it's class from *integer*  to that of the class of `classe` i.e. *factor* as it will help us later when we predict our test data using our predictive model.
+
+```{r }
+train_data<- read.csv("pml-training.csv", header = TRUE, na.strings=c(" ","","NA"))
+test_data<- read.csv("pml-testing.csv", header = TRUE, na.strings=c(" ","","NA"))
+# making problem_id column of test_set to classe column as 
+names(test_data)[160]<- "classe"
+# converting the class of that column to that of class of classe variable of train_data
+test_data$classe<- as.factor(test_data$classe)
+```
+
+### Cleaning the Dataset
+
+Counting no. of variables of train and test data which has NA's greater than 5%.
+
+```{r}
+dim(train_data)
+dim(test_data)
+isNA<- function(x){sum(is.na(x))/length(x)}
+sum(sapply(train_data,isNA)> 0.05)
+sum(sapply(test_data,isNA)> 0.05)
+```
+
+Removing those variables which has more than 5% NA's as well as removing first five column of test and training data as it contains details about individual performing the task and it has nothing to do with predicting the `classe` variable as this variable doesn't depends on them.
+
+```{r}
+train_data<- train_data[,sapply(train_data,isNA)< 0.05]
+test_data<- test_data[,sapply(test_data,isNA)< 0.05]
+train_data<- train_data[,-c(1:5)]
+test_data<- test_data[,-c(1:5)]
+dim(train_data)
+dim(test_data)
+```
+
+Now talking a look at clean dataset using `summary` function.
+
+```{r}
+summary(train_data)
+```
+
+## Explortory Data Analysis
+
+We should check the correlation among variables before proceeding to the modeling procedures as it helps in analysing the scope of further dimension reduction of training data using PCA.
+
+```{r , fig.width = 14, fig.height = 15, cache = TRUE}
+library(corrgram)
+corrgram(train_data, order=TRUE, lower.panel=panel.shade,
+  upper.panel=panel.pie, text.panel=panel.txt,
+  main="Correlation among predictors of training data")
+```
+
+**Some Rendering for Correlation Values**
+
+<img src= "corrogram.png" alt="Corrogram index">
+
+**The order of variables of training data in the diagonal panel in correlation plot is same as that of order of variable in summary of train_data shown previously.**
+
+From above after visualizing the correlation among the variables of training data, we can see that there is not much correlation among many variables and we can move forward towards the modelling of data without worrying much about the correlation factor.
+
+## Prediction Model Building
+
+### 1.) Classification Decision Tree
+We first use classification trees to analyze the train data set.We have to predict classe variable from rest of the variable in the data set. We are using `rpart` package for predicting the decision tree and using `rattle` and `rpart.plot` function for ploting the fancy decision tree. 
+
+Dividing the `train_data` in training data and cross-validation data. Here we are using validation set approach.
+```{r}
+suppressMessages(library(randomForest))
+suppressMessages(library(caret))
+set.seed(1)
+inTrain  <- sample(1:nrow(train_data), .7*nrow(train_data),replace = FALSE)
+train<- train_data[inTrain,]
+cv<- train_data[-inTrain,]
+```
+
+
+```{r}
+suppressMessages(library(rattle))
+suppressMessages(library(rpart.plot))
+suppressMessages(library(rpart))
+set.seed(2)
+tree.WLE<- rpart(classe~. , train, method="class")
+```
+
+The `summary()` function the gives the number of terminal nodes, lists the variables that are used as internal nodes in the tree and the (training) error rate.
+
+
+```{r, fig.width = 14, fig.height =15 , cache = TRUE}
+suppressWarnings(fancyRpartPlot(tree.WLE))
+```
+
+```{r}
+tree.pred <- predict(tree.WLE ,cv, type ="class")
+DecTreeConfMat<- confusionMatrix(tree.pred, cv$classe)
+DecTreeConfMat
+```
+
+```{r }
+plot(DecTreeConfMat$table, col = DecTreeConfMat$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(DecTreeConfMat$overall['Accuracy'], 4)))
+```
+
+
+
+### 2.) Boosting
+
+Using `caret` package as it is difficult to assume the argument `n.tree` and `interaction.depth` in `gbm` function ,`caret` should handle all the parameter stuff. As in `gbm` package we have to assume `n.tree` and `interation.depth` argument initially and select the best one using cross-validation method which might be hectic in comparision to that of boosting done by `caret` as most of the cross-validation and assuming appropriate `n.tree` and `interaction.depth` is done by the function present in caret package itself.
+
+```{r, cache = TRUE}
+set.seed(5)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+GBM.WLE  <- train(classe ~ ., data= train, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+GBM.WLE
+```
+
+
+```{r}
+GBM.pred <- predict(GBM.WLE, newdata = cv)
+GBMConfMat <- confusionMatrix(GBM.pred, cv$classe)
+GBMConfMat
+```
+
+
+```{r}
+plot(GBMConfMat$table, col = GBMConfMat$byClass, 
+     main = paste("GBM - Accuracy =", round(GBMConfMat$overall['Accuracy'], 4)))
+```
+
+### 3.) Bagging
+
+In Bagging we build a number of decision trees on bootstrapped training samples whereas Random forests provide an improvement over bagged trees by way of a
+small tweak that decorrelates the trees  building these decision trees, each time a split in a tree is considered, a random sample of m predictors is chosen as split candidates from the full set of p predictors. 
+As bagging can also be done using `caret` package and infact easier to use there as it includes functions for cross-validation but here I am using `randomForesrt` package to show how `Bagging` is simply a special case of a `Random Forest` with m = p (in randomForest function `m` is represented as argument `mtry`).
+
+```{r , cache = TRUE}
+suppressMessages(library(randomForest))
+set.seed(3)
+bag.WLE<- randomForest(classe ~ ., train, mtry = dim(train)[2]-1, importance =TRUE)
+bag.WLE
+```
+
+```{r}
+bag.pred <- predict(bag.WLE,newdata = cv)
+BagConfMat <- confusionMatrix(bag.pred, cv$classe)
+BagConfMat
+```
+
+```{r}
+plot(BagConfMat$table, col =BagConfMat$byClass,
+     main = paste("Bagging - Accuracy =",
+                   round(BagConfMat$overall['Accuracy'], 4)))
+```
+
+### 4.) Random Forest
+
+Growing a random forest proceeds in exactly the same way, except that we use a smaller value of the mtry argument. By default, randomForest()
+uses p/3 variables when building a random forest of regression trees, and sqrt(p) variables when building a random forest of classification trees.
+Since our datat is for classsification tree, we use mtry = sqrt(p).
+
+```{r , cache =TRUE}
+attach(train)
+set.seed(4)
+rForest.WLE<- randomForest(classe ~ ., train, mtry = sqrt(dim(train)[2]-1), importance =TRUE)
+rForest.WLE
+```
+
+
+```{r}
+rForest.pred <- predict(rForest.WLE, newdata = cv)
+rForestConfMat <- confusionMatrix(rForest.pred, cv$classe)
+rForestConfMat
+```
+
+```{r}
+plot(rForestConfMat$table, col =rForestConfMat$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                   round(rForestConfMat$overall['Accuracy'], 4)))
+```
+
+
+
+## Conclusion
+
+Form above we get the accuracy of our four prediction model :
+
+**1. Classification Tree : `r round(DecTreeConfMat$overall['Accuracy'], 4)`**
+
+**2. Boosting : `r round(GBMConfMat$overall['Accuracy'], 4)`**
+
+**3. Bagging : `r round(BagConfMat$overall['Accuracy'], 4)`**
+
+**4. Random Forest : `r round(rForestConfMat$overall['Accuracy'], 4)`**
+
+From above it is clear that Random Forest has the highest accuracy among others.
+So we apply Random Forest model on 20 test data to predict the `classe`.
+
+
+```{r}
+# to overcome this - Error in predict.randomForest(rForest.WLE, newdata = test_data) : 
+# Type of predictors in new data do not match that of the training data.
+test_data <- rbind(train_data[1, ] , test_data)
+test_data <- test_data[-1,]
+test.pred <- predict(rForest.WLE, newdata=test_data)
+
+# to remove the names of test_data i.e row containin integer 2 to 21 using "unname" function
+# 2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 
+#  B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
+# Levels: A B C D E
+unname(test.pred)
+```
