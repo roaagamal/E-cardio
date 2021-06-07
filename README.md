@@ -1,7 +1,8 @@
-# PracticalMachineLearning
+# Predictions using the Weight Lifting Exercises Dataset
+
+Based on a dataset provide by HAR http://groupware.les.inf.puc-rio.br/har try to train a predictive model to predict what exercise was performed using a dataset with 159 features
 
 ## Executive Summary
-Based on a dataset provide by HAR http://groupware.les.inf.puc-rio.br/har try to train a predictive model to predict what exercise was performed using a dataset with 159 features
 
 We’ll take the following steps:
 
